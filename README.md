@@ -1,60 +1,53 @@
-# 🚀 Project Name
+# 🚀 SupportGenie
 
 ## 📌 Table of Contents
 - [Introduction](#introduction)
-- [Demo](#demo)
-- [Inspiration](#inspiration)
 - [What It Does](#what-it-does)
-- [How We Built It](#how-we-built-it)
-- [Challenges We Faced](#challenges-we-faced)
 - [How to Run](#how-to-run)
 - [Tech Stack](#tech-stack)
-- [Team](#team)
 
 ---
 
 ## 🎯 Introduction
-A brief overview of your project and its purpose. Mention which problem statement are your attempting to solve. Keep it concise and engaging.
-
-## 🎥 Demo
-🔗 [Live Demo](#) (if applicable)  
-📹 [Video Demo](#) (if applicable)  
-🖼️ Screenshots:
-
-![Screenshot 1](link-to-image)
-
-## 💡 Inspiration
-What inspired you to create this project? Describe the problem you're solving.
+This project aims to develop a chatbot powered by Generative AI to assist IT support teams in incident management. The chatbot leverages a trained AI model to analyze incident reports, suggest potential solutions, and provide troubleshooting steps based on historical data and best practices.
 
 ## ⚙️ What It Does
-Explain the key features and functionalities of your project.
-
-## 🛠️ How We Built It
-Briefly outline the technologies, frameworks, and tools used in development.
-
-## 🚧 Challenges We Faced
-Describe the major technical or non-technical challenges your team encountered.
+The system is designed to:
+1. Provide real-time AI-driven suggestions for resolving IT incidents.
+2. Improve response time and efficiency in IT support operations.
+3. Continuously learn from past incidents to enhance its recommendation accuracy.
+4. Integrate with existing ITSM (IT Service Management) tools for seamless workflow support.
 
 ## 🏃 How to Run
-1. Clone the repository  
-   ```sh
-   git clone https://github.com/your-repo.git
-   ```
-2. Install dependencies  
-   ```sh
-   npm install  # or pip install -r requirements.txt (for Python)
-   ```
-3. Run the project  
-   ```sh
-   npm start  # or python app.py
-   ```
+- Install dependencies pip install -r requirements.txt
+- Set up `.env` file for sensitive configurations
+- Configure model paths
+- Set up Hugging Face authentication if required
+- Model Configuration
+```python
+
+model_config = {
+&#39;model_name&#39;: &#39;bert-base-uncased&#39;,
+&#39;max_length&#39;: 128,
+&#39;num_labels&#39;: 4, # Based on incident statuses
+&#39;learning_rate&#39;: 2e-5
+}
+```
+- Local Deployment
+```bash
+# Run Streamlit application
+streamlit run incidentchatbot.py
+```
 
 ## 🏗️ Tech Stack
-- 🔹 Frontend: React / Vue / Angular
-- 🔹 Backend: Node.js / FastAPI / Django
-- 🔹 Database: PostgreSQL / Firebase
-- 🔹 Other: OpenAI API / Twilio / Stripe
-
-## 👥 Team
-- **Your Name** - [GitHub](#) | [LinkedIn](#)
-- **Teammate 2** - [GitHub](#) | [LinkedIn](#)
+- **Core Libraries**:
+- PyTorch
+- Transformers (Hugging Face)
+- LangChain
+- Streamlit
+- **Machine Learning**:
+- BERT-based sequence classification
+- Text generation pipeline
+- **Data Processing**:
+- Pandas
+- scikit-learn
