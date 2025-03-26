@@ -12,7 +12,7 @@ from transformers import (
 from torch.optim import AdamW
 
 class IncidentDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=128):
+    def __init__(self, texts, labels, tokenizer, max_length=256):
         """
         Custom dataset for incident management classification
         """
@@ -40,8 +40,18 @@ def prepare_incident_data(csv_path):
     # Read the CSV file
     df = pd.read_csv(csv_path)
     
-    # Combine relevant text features
-    df['incident_text'] = df['Issue Summary'] + ' ' + df['Department'] + ' ' + df['Category']
+    # Fill NaN values with empty strings to prevent errors
+    df['Resolution Summary'] = df['Resolution Summary'].fillna('')
+    df['Troubleshooting Doc Link'] = df['Troubleshooting Doc Link'].fillna('')
+    
+    # Combine all relevant text features
+    df['incident_text'] = (
+        df['Issue Summary'] + ' ' + 
+        df['Department'] + ' ' + 
+        df['Category'] + ' ' + 
+        df['Resolution Summary'] + ' ' + 
+        df['Troubleshooting Doc Link']
+    )
     
     # Encode categorical labels
     label_encoder = LabelEncoder()
@@ -58,8 +68,8 @@ def train_incident_model(
     train_labels, 
     model_name='bert-base-uncased',
     num_classes=None, 
-    epochs=10,  # Increased epochs 
-    batch_size=4,  # Reduced batch size for small dataset
+    epochs=12,  # Slightly increased epochs
+    batch_size=4,
     learning_rate=2e-5
 ):
     """
@@ -89,8 +99,8 @@ def train_incident_model(
     )
 
     # Create datasets
-    train_dataset = IncidentDataset(X_train, y_train, tokenizer)
-    val_dataset = IncidentDataset(X_val, y_val, tokenizer)
+    train_dataset = IncidentDataset(X_train, y_train, tokenizer, max_length=256)
+    val_dataset = IncidentDataset(X_val, y_val, tokenizer, max_length=256)
 
     # Create dataloaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -190,13 +200,13 @@ def predict_incident(model, tokenizer, incident_text, label_encoder, device=None
     model.to(device)
     model.eval()
 
-    # Tokenize input
+    # Tokenize input with increased max length
     inputs = tokenizer(
         incident_text, 
         return_tensors='pt', 
         truncation=True,
         padding=True,
-        max_length=128
+        max_length=256
     ).to(device)
 
     with torch.no_grad():
@@ -206,7 +216,11 @@ def predict_incident(model, tokenizer, incident_text, label_encoder, device=None
 
     # Decode the predicted label
     predicted_status = label_encoder.inverse_transform(predicted_class.cpu().numpy())[0]
-    return predicted_status
+    
+    # Get confidence score
+    confidence_score = predictions[0][predicted_class].item()
+    
+    return predicted_status, confidence_score
 
 def main():
     # Path to your CSV file
@@ -231,14 +245,15 @@ def main():
 
     print("\nPrediction Examples:")
     for incident in sample_incidents:
-        predicted_status = predict_incident(
+        predicted_status, confidence = predict_incident(
             trained_model, 
             trained_tokenizer, 
             incident, 
             label_encoder
         )
         print(f"Incident: {incident}")
-        print(f"Predicted Status: {predicted_status}\n")
+        print(f"Predicted Status: {predicted_status}")
+        print(f"Confidence Score: {confidence:.4f}\n")
 
     # Optional: Save the model
     model_save_path = './incident_management_model'

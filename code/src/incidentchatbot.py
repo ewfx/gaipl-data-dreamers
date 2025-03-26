@@ -6,12 +6,10 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from langchain.prompts import PromptTemplate
-#from langchain.llms import HuggingFacePipeline
 from langchain.chains import LLMChain
 from transformers import pipeline
 from langchain_community.llms import HuggingFacePipeline
 
-# Load the pre-trained incident classification model
 def load_incident_model(model_path='./incident_management_model'):
     """
     Load the pre-trained incident classification model
@@ -23,47 +21,45 @@ def load_incident_model(model_path='./incident_management_model'):
         # Check if model directory exists
         if not os.path.exists(full_model_path):
             st.error(f"Model directory not found: {full_model_path}")
-            return None, None, None
+            return None, None, None, None
 
         # Load tokenizer and model from local directory
         tokenizer = AutoTokenizer.from_pretrained(full_model_path)
         model = AutoModelForSequenceClassification.from_pretrained(full_model_path)
         
-        # Load label encoder
+        # Load label encoder and dataframe
         df = pd.read_csv('C:/Users/srikr/OneDrive/Desktop/Hackathon/Incident_Management.csv')
         label_encoder = LabelEncoder()
         label_encoder.fit(df['Status'])
         
-        return model, tokenizer, label_encoder
+        return model, tokenizer, label_encoder, df
     except Exception as e:
         st.error(f"Error loading model: {e}")
-        return None, None, None
+        return None, None, None, None
 
-# Fallback model loading method
 def load_model_fallback(model_name='bert-base-uncased'):
     """
     Fallback method to load a base model if local model fails
     """
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
+        df = pd.read_csv('C:/Users/srikr/OneDrive/Desktop/Hackathon/Incident_Management.csv')
         model = AutoModelForSequenceClassification.from_pretrained(
             model_name, 
-            num_labels=len(set(pd.read_csv('C:/Users/srikr/OneDrive/Desktop/Hackathon/Incident_Management.csv')['Status']))
+            num_labels=len(set(df['Status']))
         )
         
-        df = pd.read_csv('C:/Users/srikr/OneDrive/Desktop/Hackathon/Incident_Management.csv')
         label_encoder = LabelEncoder()
         label_encoder.fit(df['Status'])
         
-        return model, tokenizer, label_encoder
+        return model, tokenizer, label_encoder, df
     except Exception as e:
         st.error(f"Fallback model loading failed: {e}")
-        return None, None, None
+        return None, None, None, None
 
-# Predict incident status
-def predict_incident_status(model, tokenizer, incident_text, label_encoder):
+def predict_incident_details(model, tokenizer, incident_text, label_encoder, df):
     """
-    Predict incident status using the trained model
+    Predict incident status and find matching incident details
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
@@ -85,9 +81,22 @@ def predict_incident_status(model, tokenizer, incident_text, label_encoder):
 
     # Decode the predicted label
     predicted_status = label_encoder.inverse_transform(predicted_class.cpu().numpy())[0]
-    return predicted_status
+    
+    # Find the most similar incident in the dataset
+    df['similarity_score'] = df.apply(
+        lambda row: len(set(incident_text.lower().split()) & set(row['Issue Summary'].lower().split())), 
+        axis=1
+    )
+    
+    # Get the most similar incident details
+    most_similar_incident = df.loc[df['similarity_score'].idxmax()]
+    
+    return {
+        'predicted_status': predicted_status,
+        'resolution_summary': most_similar_incident.get('Resolution Summary', 'No resolution summary available'),
+        'troubleshooting_link': most_similar_incident.get('Troubleshooting Doc Link', 'No troubleshooting link available')
+    }
 
-# Create LangChain conversational chain
 def create_incident_chain():
     """
     Create a conversational chain for incident management
@@ -106,16 +115,10 @@ def create_incident_chain():
     prompt_template = PromptTemplate(
         input_variables=["incident_text", "status"],
         template="""
-        You are an AI incident management assistant. 
         
         Incident Description: {incident_text}
         Predicted Incident Status: {status}
-        
-        Provide a helpful and professional response addressing the incident. 
-        Include:
-        - A brief summary of the incident
-        - Potential next steps
-        - Recommendations for resolution
+                
         
         Response:"""
     )
@@ -123,7 +126,6 @@ def create_incident_chain():
     # Create LLM chain
     return LLMChain(llm=llm, prompt=prompt_template)
 
-# Streamlit Application
 def main():
     # Set page configuration
     st.set_page_config(
@@ -142,6 +144,13 @@ def main():
         background-color: white;
         color: black;
     }
+    .highlight-box {
+        background-color: #f9f9f9;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        padding: 15px;
+        margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -150,12 +159,12 @@ def main():
     st.write("An AI-powered assistant for managing and analyzing IT incidents.")
 
     # Attempt to load local model, fallback to base model if needed
-    model, tokenizer, label_encoder = load_incident_model()
+    model, tokenizer, label_encoder, df = load_incident_model()
     
     # If local model fails, try fallback
     if model is None:
         st.warning("Couldn't load local model. Using fallback model.")
-        model, tokenizer, label_encoder = load_model_fallback()
+        model, tokenizer, label_encoder, df = load_model_fallback()
 
     # Verify model is loaded
     if model is None:
@@ -178,27 +187,39 @@ def main():
     # Process incident when user submits
     if user_input:
         try:
-            # Predict incident status
-            predicted_status = predict_incident_status(
-                model, tokenizer, user_input, label_encoder
+            # Predict incident details
+            incident_details = predict_incident_details(
+                model, tokenizer, user_input, label_encoder, df
             )
 
             # Generate detailed response using LangChain
             response = incident_chain.run(
                 incident_text=user_input, 
-                status=predicted_status
+                status=incident_details['predicted_status']
             )
 
-            # Display results in columns
-            col1, col2 = st.columns(2)
+            # Create three columns for detailed display
+            col1, col2, col3 = st.columns(3)
             
             with col1:
                 st.subheader("Incident Analysis")
-                st.write(f"**Predicted Status:** {predicted_status}")
+                st.markdown(f"**Predicted Status:** {incident_details['predicted_status']}")
 
             with col2:
-                st.subheader("Recommended Actions")
-                st.write(response)
+                st.subheader("Resolution Summary")
+                st.markdown(f"**Details:** {incident_details['resolution_summary']}")
+
+            with col3:
+                st.subheader("Troubleshooting")
+                # Check if link is a valid URL
+                if incident_details['troubleshooting_link'].startswith(('http://', 'https://')):
+                    st.markdown(f"**Link:** [{incident_details['troubleshooting_link']}]({incident_details['troubleshooting_link']})")
+                else:
+                    st.markdown(f"**Link:** {incident_details['troubleshooting_link']}")
+
+            # Display AI-generated response
+            st.subheader("Recommended Actions")
+            st.markdown(f"<div class='highlight-box'>{response}</div>", unsafe_allow_html=True)
 
         except Exception as e:
             st.error(f"Error processing incident: {e}")
